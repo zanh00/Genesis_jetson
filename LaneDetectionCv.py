@@ -56,7 +56,7 @@ def gauss(image):
 
 # Canny edge detection
 def canny(image):
-    return cv2.Canny(image, 120, 170)
+    return cv2.Canny(image, 140, 180)
 
 # Mask region of interest
 def region_of_interest(image, og_image):
@@ -101,7 +101,7 @@ def calculate_curvature(y_eval, fit_coeffs):
 
 # Draw lanes on the image
 def draw_lane(image, left_fit, right_fit):
-    max_y_value = 550
+    max_y_value = 430
     y_vals = np.linspace(0, image.shape[0] - 1, image.shape[0])
 
 
@@ -143,6 +143,11 @@ def draw_lane(image, left_fit, right_fit):
 
     return image
 
+def visualize_points(img, points):
+    for pt in points:
+        cv2.circle(img, tuple(pt), radius=5, color=(0, 255, 0), thickness=-1)
+    return img
+
 def detect(cap):
     while cap.isOpened():
         with frame_lock:
@@ -171,20 +176,28 @@ def detect(cap):
         # Fit polynomials to left and right lane lines
         left_fit = fit_polynomial(left_x_vals, left_y_vals)
         right_fit = fit_polynomial(right_x_vals, right_y_vals)
+
+        # Stack x and y coordinates for left and right lanes
+        left_lane_coordinates = np.column_stack((left_x_vals, left_y_vals))
+        right_lane_coordinates = np.column_stack((right_x_vals, right_y_vals))
+
+        combined_points = np.concatenate((left_lane_coordinates, right_lane_coordinates))
+
+        frame_with_lanes = visualize_points(frame, combined_points)
         
-        # Draw lane lines on the frame
-        frame_with_lanes = draw_lane(frame, left_fit, right_fit)
+        # # Draw lane lines on the frame
+        # frame_with_lanes = draw_lane(frame, left_fit, right_fit)
         
-        # Calculate the curvature
-        y_eval = frame.shape[0]  # evaluate curvature at the bottom of the image
-        left_curvature = calculate_curvature(y_eval, left_fit)
-        right_curvature = calculate_curvature(y_eval, right_fit)
+        # # Calculate the curvature
+        # y_eval = frame.shape[0]  # evaluate curvature at the bottom of the image
+        # left_curvature = calculate_curvature(y_eval, left_fit)
+        # right_curvature = calculate_curvature(y_eval, right_fit)
         
-        # Calculate the average curvature
-        if left_curvature is not None and right_curvature is not None:
-            curvature = (left_curvature + right_curvature) / 2
-            curvature_text = f"Radius of Curvature: {curvature:.2f}m"
-            cv2.putText(frame_with_lanes, curvature_text, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        # # Calculate the average curvature
+        # if left_curvature is not None and right_curvature is not None:
+        #     curvature = (left_curvature + right_curvature) / 2
+        #     curvature_text = f"Radius of Curvature: {curvature:.2f}m"
+        #     cv2.putText(frame_with_lanes, curvature_text, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
         
         end_time = time.time()
         # Calculate FPS
