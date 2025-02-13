@@ -61,7 +61,7 @@ def gauss(image):
 
 # Canny edge detection
 def canny(image):
-    return cv2.Canny(image, 140, 180)
+    return cv2.Canny(image, 130, 200)
 
 # Mask region of interest
 def region_of_interest(image, og_image):
@@ -70,10 +70,10 @@ def region_of_interest(image, og_image):
 
     # Define the region of interest
     polygon = np.array([[
-        (int(width * 0.1), height),
-        (int(width * 0.9), height),
-        (int(width * 0.62), int(height * 0.42)),
-        (int(width * 0.32), int(height * 0.42))
+        (int(width * 0.0), height),
+        (int(width * 1.0), height),
+        (int(width * 0.9), int(height * 0.42)),
+        (int(width * 0.1), int(height * 0.42))
     ]], np.int32)
 
     cv2.fillPoly(mask, polygon, 255)
@@ -258,13 +258,16 @@ def detect(cap):
         except Exception as e:
             print("Error in fitting polynomial: ", e)
             cleanup_and_exit(cap)
-        # #left_lane_coordinates, right_lane_coordinates = get_outer_line_points(left_lane_coordinates, right_lane_coordinates)
+        
 
+        #############################################################################################################
         # combined_points = np.concatenate((left_lane_coordinates, right_lane_coordinates))
 
         # frame_with_lanes = visualize_points(frame, combined_points)
+        #############################################################################################################
         
         # Draw lane lines on the frame
+
         frame_with_lanes = draw_lane(warped_frame, left_fit, right_fit)
 
         # Calculate the curvature
@@ -289,7 +292,7 @@ def detect(cap):
 
         # Display FPS on the output image (optional)
         cv2.putText(frame_with_lanes, f"FPS: {fps:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        cv2.imshow('Processed Video', warped_frame)
+        cv2.imshow('Processed Video', frame_with_lanes)
         
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
