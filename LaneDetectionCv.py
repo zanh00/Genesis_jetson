@@ -166,17 +166,17 @@ def visualize_points(img, points):
 def perspective_transform(left_lane_points, right_lane_points, image=None):
 
     src_rel = np.float32([
-        [0.65, 0.50],  # Top-left  <-- Swapped
-        [0.32, 0.50],  # Top-right <-- Swapped
-        [0.80, 1.00],  # Bottom-left <-- Swapped
-        [0.20, 1.00]   # Bottom-right <-- Swapped
+        [0.65, 0.45],  # Top-left  <-- Swapped
+        [0.35, 0.45],  # Top-right <-- Swapped
+        [0.92, 1.00],  # Bottom-left <-- Swapped
+        [0.08, 1.00]   # Bottom-right <-- Swapped
     ])
 
     dst_rel = np.float32([
-    [0.2, 0.],  # Top-left (aligned to new top)
-    [0.85, 0.],   # Top-right (aligned to new top)
-    [0.2, 1.],  # Bottom-left (aligned to new bottom)
-    [0.8, 1.]  # Bottom-right (aligned to new bottom)
+    [0.25, 0.],  # Top-left (aligned to new top)
+    [0.65, 0.],   # Top-right (aligned to new top)
+    [0.15, 1.],  # Bottom-left (aligned to new bottom)
+    [0.85, 1.]  # Bottom-right (aligned to new bottom)
     ])
 
     src = np.float32([
