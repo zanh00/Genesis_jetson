@@ -61,7 +61,7 @@ def gauss(image):
 
 # Canny edge detection
 def canny(image):
-    return cv2.Canny(image, 130, 200)
+    return cv2.Canny(image, 80, 170)
 
 # Mask region of interest
 def region_of_interest(image, og_image):
@@ -78,8 +78,109 @@ def region_of_interest(image, og_image):
 
     cv2.fillPoly(mask, polygon, 255)
 
-    #cv2.polylines(og_image, polygon, isClosed=True, color=(0, 255, 0), thickness=3) # visualize the polygon to the screen
+    cv2.polylines(og_image, polygon, isClosed=True, color=(0, 255, 0), thickness=3) # visualize the polygon to the screen
     return cv2.bitwise_and(image, mask)
+
+def hough_transform(image):
+    """
+    Determine and cut the region of interest in the input image.
+    Parameter:
+        image: grayscale image which should be an output from the edge detector
+    """
+    # Distance resolution of the accumulator in pixels.
+    rho = 1             
+    # Angle resolution of the accumulator in radians.
+    theta = np.pi/180   
+    # Only lines that are greater than threshold will be returned.
+    threshold = 20      
+    # Line segments shorter than that are rejected.
+    minLineLength = 20  
+    # Maximum allowed gap between points on the same line to link them
+    maxLineGap = 500    
+    # function returns an array containing dimensions of straight lines 
+    # appearing in the input image
+    return cv2.HoughLinesP(image, rho = rho, theta = theta, threshold = threshold,
+                           minLineLength = minLineLength, maxLineGap = maxLineGap)
+
+def average_slope_intercept(lines):
+    """
+    Find the slope and intercept of the left and right lanes of each image.
+    Parameters:
+        lines: output from Hough Transform
+    """
+    left_lines    = [] #(slope, intercept)
+    left_weights  = [] #(length,)
+    right_lines   = [] #(slope, intercept)
+    right_weights = [] #(length,)
+     
+    for line in lines:
+        for x1, y1, x2, y2 in line:
+            if x1 == x2:
+                continue
+            # calculating slope of a line
+            slope = (y2 - y1) / (x2 - x1)
+            # calculating intercept of a line
+            intercept = y1 - (slope * x1)
+            # calculating length of a line
+            length = np.sqrt(((y2 - y1) ** 2) + ((x2 - x1) ** 2))
+            # slope of left lane is negative and for right lane slope is positive
+            if slope < 0:
+                left_lines.append((slope, intercept))
+                left_weights.append((length))
+            else:
+                right_lines.append((slope, intercept))
+                right_weights.append((length))
+    # 
+    left_lane  = np.dot(left_weights,  left_lines) / np.sum(left_weights)  if len(left_weights) > 0 else None
+    right_lane = np.dot(right_weights, right_lines) / np.sum(right_weights) if len(right_weights) > 0 else None
+    return left_lane, right_lane
+   
+def pixel_points(y1, y2, line):
+    """
+    Converts the slope and intercept of each line into pixel points.
+        Parameters:
+            y1: y-value of the line's starting point.
+            y2: y-value of the line's end point.
+            line: The slope and intercept of the line.
+    """
+    if line is None:
+        return None
+    slope, intercept = line
+    x1 = int((y1 - intercept)/slope)
+    x2 = int((y2 - intercept)/slope)
+    y1 = int(y1)
+    y2 = int(y2)
+    return ((x1, y1), (x2, y2))
+   
+def lane_lines(image, lines):
+    """
+    Create full lenght lines from pixel points.
+        Parameters:
+            image: The input test image.
+            lines: The output lines from Hough Transform.
+    """
+    left_lane, right_lane = average_slope_intercept(lines)
+    y1 = image.shape[0]
+    y2 = y1 * 0.4
+    left_line  = pixel_points(y1, y2, left_lane)
+    right_line = pixel_points(y1, y2, right_lane)
+    return left_line, right_line
+ 
+     
+def draw_lane_lines(image, lines, color=[120, 120, 0], thickness=10):
+    """
+    Draw lines onto the input image.
+        Parameters:
+            image: The input test image (video frame in our case).
+            lines: The output lines from Hough Transform.
+            color: Line color.
+            thickness: Line thickness. 
+    """
+    line_image = np.zeros_like(image)
+    for line in lines:
+        if line is not None:
+            cv2.line(line_image, *line,  color, thickness)
+    return cv2.addWeighted(image, 1.0, line_image, 1.0, 0.0)
 
 # Extract lane pixels using non-zero values
 def extract_lane_pixels(image):
@@ -223,67 +324,79 @@ def detect(cap):
         blurred_img = gauss(grey_img)
         edges = canny(blurred_img)
         masked_edges = region_of_interest(edges, frame)
-        #masked_edges = edges
+        lines = hough_transform(masked_edges)
 
-        # Extract lane pixels
-        left_pixels = masked_edges[:, :masked_edges.shape[1]//2]
-        right_pixels = masked_edges[:, masked_edges.shape[1]//2:]
-
-        left_x_vals, left_y_vals = extract_lane_pixels(left_pixels)
-        right_x_vals, right_y_vals = extract_lane_pixels(right_pixels)
-        
-        # Adjust right_x_vals to be in the right half of the image
-        right_x_vals += masked_edges.shape[1] // 2
-
-        # Stack x and y coordinates for left and right lanes
-        left_lane_coordinates = np.column_stack((left_x_vals, left_y_vals))
-        right_lane_coordinates = np.column_stack((right_x_vals, right_y_vals))
-
-
-        left_lane_coordinates_t, right_lane_coordinates_t, warped_frame = perspective_transform(left_lane_coordinates, right_lane_coordinates , frame)
-        if left_lane_coordinates_t is None or right_lane_coordinates_t is None:
+        if lines is None:
+            print("No lines detected")
             continue
 
-        try:
-            left_x_vals, left_y_vals = split_coordinates(left_lane_coordinates_t)
-            right_x_vals, right_y_vals = split_coordinates(right_lane_coordinates_t)
-        except Exception as e:
-            print("Error in splitting coordinates: ", e)
-            cleanup_and_exit(cap)
+        # Draw lines on the original image
+        #result = draw_lane_lines(frame, lane_lines(frame, lines))
+        lane_lines(frame, lines)
 
-        # Fit polynomials to left and right lane lines
-        try:
-            left_fit = fit_polynomial(left_x_vals, left_y_vals)
-            right_fit = fit_polynomial(right_x_vals, right_y_vals)
-        except Exception as e:
-            print("Error in fitting polynomial: ", e)
-            cleanup_and_exit(cap)
-        
-
-        #############################################################################################################
         combined_points = np.concatenate((left_lane_coordinates, right_lane_coordinates))
 
         frame_with_lanes = visualize_points(frame, combined_points)
-        #############################################################################################################
+
+        # # Extract lane pixels
+        # left_pixels = masked_edges[:, :masked_edges.shape[1]//2]
+        # right_pixels = masked_edges[:, masked_edges.shape[1]//2:]
+
+        # left_x_vals, left_y_vals = extract_lane_pixels(left_pixels)
+        # right_x_vals, right_y_vals = extract_lane_pixels(right_pixels)
         
-        # Draw lane lines on the frame
+        # # Adjust right_x_vals to be in the right half of the image
+        # right_x_vals += masked_edges.shape[1] // 2
 
-        #frame_with_lanes = draw_lane(warped_frame, left_fit, right_fit)
+        # # Stack x and y coordinates for left and right lanes
+        # left_lane_coordinates = np.column_stack((left_x_vals, left_y_vals))
+        # right_lane_coordinates = np.column_stack((right_x_vals, right_y_vals))
 
-        # Calculate the curvature
-        try:
-            y_eval = frame.shape[0]  # evaluate curvature at the bottom of the image
-            left_curvature = calculate_curvature(y_eval, left_fit)
-            right_curvature = calculate_curvature(y_eval, right_fit)
-        except Exception as e:
-            print("Error in calculating curvature: ", e)
-            cleanup_and_exit(cap)
+
+        # left_lane_coordinates_t, right_lane_coordinates_t, warped_frame = perspective_transform(left_lane_coordinates, right_lane_coordinates , frame)
+        # if left_lane_coordinates_t is None or right_lane_coordinates_t is None:
+        #     continue
+
+        # try:
+        #     left_x_vals, left_y_vals = split_coordinates(left_lane_coordinates_t)
+        #     right_x_vals, right_y_vals = split_coordinates(right_lane_coordinates_t)
+        # except Exception as e:
+        #     print("Error in splitting coordinates: ", e)
+        #     cleanup_and_exit(cap)
+
+        # # Fit polynomials to left and right lane lines
+        # try:
+        #     left_fit = fit_polynomial(left_x_vals, left_y_vals)
+        #     right_fit = fit_polynomial(right_x_vals, right_y_vals)
+        # except Exception as e:
+        #     print("Error in fitting polynomial: ", e)
+        #     cleanup_and_exit(cap)
+        
+
+        # #############################################################################################################
+        # combined_points = np.concatenate((left_lane_coordinates, right_lane_coordinates))
+
+        # frame_with_lanes = visualize_points(frame, combined_points)
+        # #############################################################################################################
+        
+        # # Draw lane lines on the frame
+
+        # #frame_with_lanes = draw_lane(warped_frame, left_fit, right_fit)
+
+        # # Calculate the curvature
+        # try:
+        #     y_eval = frame.shape[0]  # evaluate curvature at the bottom of the image
+        #     left_curvature = calculate_curvature(y_eval, left_fit)
+        #     right_curvature = calculate_curvature(y_eval, right_fit)
+        # except Exception as e:
+        #     print("Error in calculating curvature: ", e)
+        #     cleanup_and_exit(cap)
             
-        # Calculate the average curvature
-        if left_curvature is not None and right_curvature is not None:
-            curvature = (left_curvature + right_curvature) / 2
-            curvature_text = f"Radius of Curvature: {curvature:.2f}m"
-            cv2.putText(frame_with_lanes, curvature_text, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        # # Calculate the average curvature
+        # if left_curvature is not None and right_curvature is not None:
+        #     curvature = (left_curvature + right_curvature) / 2
+        #     curvature_text = f"Radius of Curvature: {curvature:.2f}m"
+        #     cv2.putText(frame_with_lanes, curvature_text, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
         end_time = time.time()
         # Calculate FPS
@@ -291,8 +404,8 @@ def detect(cap):
         fps = 1 / (end_time - start_time)
 
         # Display FPS on the output image (optional)
-        cv2.putText(frame_with_lanes, f"FPS: {fps:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        cv2.imshow('Processed Video', frame_with_lanes)
+        cv2.putText(result, f"FPS: {fps:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.imshow('Processed Video', result)
         
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
