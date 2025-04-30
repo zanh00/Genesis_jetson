@@ -116,7 +116,7 @@ def calculate_curvature(y_eval, fit_coeffs):
 
 # Draw lanes on the image
 def draw_lane(image, left_fit, right_fit):
-    max_y_value = 430
+    max_y_value = 250
     y_vals = np.linspace(0, image.shape[0] - 1, image.shape[0])
 
 
@@ -240,13 +240,13 @@ def detect(cap):
         right_lane_coordinates = np.column_stack((right_x_vals, right_y_vals))
 
 
-        left_lane_coordinates, right_lane_coordinates, warped_frame = perspective_transform(left_lane_coordinates, right_lane_coordinates , frame)
-        if left_lane_coordinates is None or right_lane_coordinates is None:
+        left_lane_coordinates_t, right_lane_coordinates_t, warped_frame = perspective_transform(left_lane_coordinates, right_lane_coordinates , frame)
+        if left_lane_coordinates_t is None or right_lane_coordinates_t is None:
             continue
 
         try:
-            left_x_vals, left_y_vals = split_coordinates(left_lane_coordinates)
-            right_x_vals, right_y_vals = split_coordinates(right_lane_coordinates)
+            left_x_vals, left_y_vals = split_coordinates(left_lane_coordinates_t)
+            right_x_vals, right_y_vals = split_coordinates(right_lane_coordinates_t)
         except Exception as e:
             print("Error in splitting coordinates: ", e)
             cleanup_and_exit(cap)
@@ -261,14 +261,14 @@ def detect(cap):
         
 
         #############################################################################################################
-        # combined_points = np.concatenate((left_lane_coordinates, right_lane_coordinates))
+        combined_points = np.concatenate((left_lane_coordinates, right_lane_coordinates))
 
-        # frame_with_lanes = visualize_points(frame, combined_points)
+        frame_with_lanes = visualize_points(frame, combined_points)
         #############################################################################################################
         
         # Draw lane lines on the frame
 
-        frame_with_lanes = draw_lane(warped_frame, left_fit, right_fit)
+        #frame_with_lanes = draw_lane(warped_frame, left_fit, right_fit)
 
         # Calculate the curvature
         try:
