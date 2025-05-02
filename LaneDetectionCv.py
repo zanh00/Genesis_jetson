@@ -15,6 +15,7 @@ IMAGE_HEIGHT = 720
 
 LANE_WIDTH_METERS = 0.3  # Width of the lane in meters
 XM_PER_PIX = 0.0004  # Meters per pixel in the x dimension (based on camera position and angle)
+YM_PER_PIX = 0.33/720  # Meters per pixel in the y dimension (measured manually)
 
 def init():
     # GStreamer pipeline for the Raspberry Pi Camera
@@ -120,11 +121,6 @@ def fit_poly(lane_points):
     fit = np.polyfit(y, x, 2)  # Fitting x = f(y)
     return fit
 
-def calculate_curvature(poly_coeffs, y_eval):
-    A, B, _ = poly_coeffs
-    # Radius of curvature: (1 + (2Ay + B)^2)^1.5 / abs(2A)
-    return ((1 + (2*A*y_eval + B)**2)**1.5) / np.absolute(2*A)
-
 def draw_poly_curve(img, poly_coeffs):
     ploty = np.linspace(0, img.shape[0]-1, img.shape[0])
     fitx = poly_coeffs[0]*ploty**2 + poly_coeffs[1]*ploty + poly_coeffs[2]
@@ -193,7 +189,7 @@ def draw_lane_points(image, lane_points, color=(0, 0, 255), radius=3):
 # Measure lane pixel width in bird's eye view (at bottom of warped image)
 def get_pixel_to_meter_ratio(left_fit, right_fit, img_height):
     """
-    This function calculates the pixel-to-meter ratio based on the known lane width in meters.
+    This function calculates the pixel-to-meter ratio for x axis based on the known lane width in meters.
     It uses the polynomial coefficients of the left and right lane lines to find their positions at the bottom of the image.
     This only needs to be done once, than just write this returned value in XM_PER_PIX constant.
     """
@@ -227,6 +223,20 @@ def get_relative_yaw_angle(left_fit, right_fit, y_eval):
     avg_lane_angle = (angle_left + angle_right) / 2
     relative_yaw = avg_lane_angle  # Relative to vertical direction (0 rad assumed straight)
     return relative_yaw
+
+def calculate_curvature(poly_coeffs, y_eval, ym_per_pix, xm_per_pix):
+    """
+    Calculates curvature κ = 1/R in m^-1 using real-world scaling.
+    """
+    A, B, _ = poly_coeffs
+
+    # Convert to real-world A, B by scaling
+    A_real = A * (xm_per_pix / (ym_per_pix ** 2))
+    B_real = B * (xm_per_pix / ym_per_pix)
+
+    denom = (1 + (2 * A_real * y_eval * ym_per_pix + B_real) ** 2) ** 1.5
+    curvature = abs(2 * A_real) / denom
+    return curvature  # in m^-1
 
 def detect(cap):
     M = None
@@ -270,6 +280,10 @@ def detect(cap):
             if right_fit is not None:
                 frame = draw_poly_curve(frame, right_fit)
 
+        if left_fit is not None and right_fit is not None:
+            middle_curve = (left_fit + right_fit) / 2
+            frame = draw_poly_curve(frame, middle_curve)
+
            
         if left_fit is not None and right_fit is not None:
             #xm_per_pix = get_pixel_to_meter_ratio(left_fit, right_fit, warped_frame.shape[0])
@@ -278,15 +292,8 @@ def detect(cap):
             rel_yaw_rad = get_relative_yaw_angle(left_fit, right_fit, warped_frame.shape[0])
             rel_yaw_deg = math.degrees(rel_yaw_rad)
             cv2.putText(frame, f"Yaw: {rel_yaw_deg:.2f} degrees", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-
-
-        #cv2.putText(frame, f"xm_per_pix: {xm_per_pix:.6f}", (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-
-        # if poly_coeffs is not None:
-        #     draw_poly_curve(frame, poly_coeffs)
-        #     # Calculate curvature
-        #     curvature = calculate_curvature(poly_coeffs, 250)
-        #     cv2.putText(frame, f"Curvature: {curvature:.2f} m", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            curvature = calculate_curvature(middle_curve, warped_frame.shape[0] - 1, YM_PER_PIX, XM_PER_PIX) 
+            cv2.putText(frame, f"Curvature: {curvature:.2f} m", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
 
         end_time = time.time()
