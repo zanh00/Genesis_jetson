@@ -8,6 +8,7 @@ import time
 import math
 import matplotlib.pyplot as plt
 import traceback
+from uartComms import JetsonNanoToSTM
 
 
 IMAGE_WIDTH = 1280
@@ -240,6 +241,8 @@ def calculate_curvature(poly_coeffs, y_eval, ym_per_pix, xm_per_pix):
 
 def detect(cap):
     M = None
+    uart_handler = JetsonNanoToSTM(baud_rate=115200)
+    uart_thread = None
     while cap.isOpened():
         with frame_lock:
             if latest_frame is not None:
@@ -284,7 +287,11 @@ def detect(cap):
             middle_curve = (left_fit + right_fit) / 2
             frame = draw_poly_curve(frame, middle_curve)
 
-           
+
+        deviation_meters = 0
+        rel_yaw_deg = 0
+        curvature = 0
+                   
         if left_fit is not None and right_fit is not None:
             #xm_per_pix = get_pixel_to_meter_ratio(left_fit, right_fit, warped_frame.shape[0])
             deviation_meters = get_lateral_deviation(left_fit, right_fit, warped_frame.shape[1], warped_frame.shape[0], XM_PER_PIX)
@@ -296,6 +303,16 @@ def detect(cap):
             cv2.putText(frame, f"Curvature: {curvature:.2f} m", (900, 110), cv2.FONT_HERSHEY_SIMPLEX, 1, (50, 200, 128), 2)
 
 
+        # Send data to STM
+        try:
+            if uart_thread is None or not uart_thread.is_alive():
+                uart_thread = threading.Thread(target=uart_handler.send_message, args=([129, 131, 128], [deviation_meters, rel_yaw_deg, curvature]))
+                uart_thread.start()
+        except Exception as e:
+            print("Error in UART thread: ", e)
+            cleanup_and_exit(cap)
+            traceback.print_exc()
+
         end_time = time.time()
         # Calculate FPS
         total_exec_time = end_time - start_time
@@ -303,6 +320,7 @@ def detect(cap):
 
         # Display FPS on the output image (optional)
         cv2.putText(frame, f"FPS: {fps:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
         cv2.imshow('Processed Video', frame)
         
         if cv2.waitKey(1) & 0xFF == ord('q'):
