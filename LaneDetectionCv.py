@@ -83,7 +83,7 @@ def region_of_interest(image, og_image):
 
     cv2.fillPoly(mask, polygon, 255)
 
-    cv2.polylines(og_image, polygon, isClosed=True, color=(0, 255, 0), thickness=3) # visualize the polygon to the screen
+    #cv2.polylines(og_image, polygon, isClosed=True, color=(0, 255, 0), thickness=3) # visualize the polygon to the screen
     return cv2.bitwise_and(image, mask)
 
 def separate_lane_lines(lane_points, img_width):
@@ -266,7 +266,7 @@ def detect(cap):
 
         warped_frame, M = perspective_transform(frame, M)
 
-        #frame = draw_lane_points(warped_frame, right_points)
+        #frame = draw_lane_points(frame, lane_points)
 
         left_fit, right_fit = None, None
 
@@ -288,12 +288,12 @@ def detect(cap):
         if left_fit is not None and right_fit is not None:
             #xm_per_pix = get_pixel_to_meter_ratio(left_fit, right_fit, warped_frame.shape[0])
             deviation_meters = get_lateral_deviation(left_fit, right_fit, warped_frame.shape[1], warped_frame.shape[0], XM_PER_PIX)
-            cv2.putText(frame, f"Deviation: {deviation_meters:.2f} m", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            rel_yaw_rad = get_relative_yaw_angle(left_fit, right_fit, warped_frame.shape[0])
+            cv2.putText(frame, f"Deviation: {deviation_meters:.2f} m", (900, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (50, 200, 128), 2)
+            rel_yaw_rad = get_relative_yaw_angle(left_fit, right_fit, (warped_frame.shape[0] - 100))
             rel_yaw_deg = math.degrees(rel_yaw_rad)
-            cv2.putText(frame, f"Yaw: {rel_yaw_deg:.2f} degrees", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            curvature = calculate_curvature(middle_curve, warped_frame.shape[0] - 1, YM_PER_PIX, XM_PER_PIX) 
-            cv2.putText(frame, f"Curvature: {curvature:.2f} m", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            cv2.putText(frame, f"Yaw: {rel_yaw_deg:.2f} degrees", (900, 80), cv2.FONT_HERSHEY_SIMPLEX, 1, (50, 200, 128), 2)
+            curvature = calculate_curvature(middle_curve, (warped_frame.shape[0] - 100) , YM_PER_PIX, XM_PER_PIX) 
+            cv2.putText(frame, f"Curvature: {curvature:.2f} m", (900, 110), cv2.FONT_HERSHEY_SIMPLEX, 1, (50, 200, 128), 2)
 
 
         end_time = time.time()
