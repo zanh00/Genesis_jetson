@@ -42,7 +42,10 @@ def cleanup_and_exit(cap):
 def capture_frames(cap):
     global latest_frame
     while True:
-        ret, frame = cap.read()
+        try:
+            ret, frame = cap.read()
+        finally:
+            cleanup_and_exit(cap)
         if not ret:
             print("Failed to grab frame")
             break
@@ -67,7 +70,7 @@ def gauss(image):
 
 # Canny edge detection
 def canny(image):
-    return cv2.Canny(image, 110, 180)
+    return cv2.Canny(image, 160, 200)
 
 # Mask region of interest
 def region_of_interest(image, og_image):
@@ -236,13 +239,14 @@ def calculate_curvature(poly_coeffs, y_eval, ym_per_pix, xm_per_pix):
     B_real = B * (xm_per_pix / ym_per_pix)
 
     denom = (1 + (2 * A_real * y_eval * ym_per_pix + B_real) ** 2) ** 1.5
-    curvature = abs(2 * A_real) / denom
+    curvature = (2 * A_real) / denom
     return curvature  # in m^-1
 
 def detect(cap):
     M = None
     uart_handler = JetsonNanoToSTM(baud_rate=115200)
     uart_thread = None
+    previous_print_time = 0
     while cap.isOpened():
         with frame_lock:
             if latest_frame is not None:
@@ -267,25 +271,25 @@ def detect(cap):
 
         left_points, right_points = separate_lane_lines(lane_points, warped_edges.shape[1])
 
-        warped_frame, M = perspective_transform(frame, M)
+        #warped_frame, M = perspective_transform(frame, M)
 
-        #frame = draw_lane_points(frame, lane_points)
+        # frame = draw_lane_points(warped_frame, lane_points)
 
         left_fit, right_fit = None, None
 
         if left_points:
             left_fit = fit_poly(left_points)
-            if left_fit is not None:
-                frame = draw_poly_curve(warped_frame, left_fit)
+            # if left_fit is not None:
+            #     frame = draw_poly_curve(warped_frame, left_fit)
 
         if right_points:
             right_fit = fit_poly(right_points)
-            if right_fit is not None:
-                frame = draw_poly_curve(frame, right_fit)
+            # if right_fit is not None:
+            #     frame = draw_poly_curve(frame, right_fit)
 
         if left_fit is not None and right_fit is not None:
             middle_curve = (left_fit + right_fit) / 2
-            frame = draw_poly_curve(frame, middle_curve)
+            #frame = draw_poly_curve(frame, middle_curve)
 
 
         deviation_meters = 0
@@ -294,13 +298,13 @@ def detect(cap):
                    
         if left_fit is not None and right_fit is not None:
             #xm_per_pix = get_pixel_to_meter_ratio(left_fit, right_fit, warped_frame.shape[0])
-            deviation_meters = get_lateral_deviation(left_fit, right_fit, warped_frame.shape[1], warped_frame.shape[0], XM_PER_PIX)
-            cv2.putText(frame, f"Deviation: {deviation_meters:.2f} m", (900, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (50, 200, 128), 2)
-            rel_yaw_rad = get_relative_yaw_angle(left_fit, right_fit, (warped_frame.shape[0] - 100))
+            deviation_meters = get_lateral_deviation(left_fit, right_fit, IMAGE_WIDTH, IMAGE_HEIGHT, XM_PER_PIX)
+            #cv2.putText(frame, f"Deviation: {deviation_meters:.2f} m", (900, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (50, 200, 128), 2)
+            rel_yaw_rad = get_relative_yaw_angle(left_fit, right_fit, (IMAGE_HEIGHT - 100))
             rel_yaw_deg = math.degrees(rel_yaw_rad)
-            cv2.putText(frame, f"Yaw: {rel_yaw_deg:.2f} degrees", (900, 80), cv2.FONT_HERSHEY_SIMPLEX, 1, (50, 200, 128), 2)
-            curvature = calculate_curvature(middle_curve, (warped_frame.shape[0] - 100) , YM_PER_PIX, XM_PER_PIX) 
-            cv2.putText(frame, f"Curvature: {curvature:.2f} m", (900, 110), cv2.FONT_HERSHEY_SIMPLEX, 1, (50, 200, 128), 2)
+            #cv2.putText(frame, f"Yaw: {rel_yaw_deg:.2f} degrees", (900, 80), cv2.FONT_HERSHEY_SIMPLEX, 1, (50, 200, 128), 2)
+            curvature = calculate_curvature(middle_curve, (IMAGE_HEIGHT - 100) , YM_PER_PIX, XM_PER_PIX) 
+            #cv2.putText(frame, f"Curvature: {curvature:.2f} m", (900, 110), cv2.FONT_HERSHEY_SIMPLEX, 1, (50, 200, 128), 2)
 
 
         # Send data to STM
@@ -319,9 +323,15 @@ def detect(cap):
         fps = 1 / (end_time - start_time)
 
         # Display FPS on the output image (optional)
-        cv2.putText(frame, f"FPS: {fps:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        #cv2.putText(frame, f"FPS: {fps:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
-        cv2.imshow('Processed Video', frame)
+        print_time = time.time()
+        if print_time - previous_print_time > 1:
+            print(f"FPS: {fps:.2f}, Deviation: {deviation_meters:.2f} m, Yaw: {rel_yaw_deg:.2f} degrees, Curvature: {curvature:.2f} m")
+            previous_print_time = print_time
+
+
+        #cv2.imshow('Processed Video', frame)
         
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
